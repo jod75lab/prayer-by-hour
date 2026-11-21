@@ -334,6 +334,42 @@
         text-align: center;
       }
 
+      footer p { margin: 0; }
+
+      .site-credit {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        margin-top: 10px;
+        padding: 5px 0;
+        border-radius: 3px;
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      .site-credit img {
+        display: block;
+        width: 22px;
+        height: 22px;
+        object-fit: contain;
+        opacity: .75;
+      }
+
+      .site-credit:hover,
+      .site-credit:focus-visible {
+        color: var(--accent-dark);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      .site-credit:hover img,
+      .site-credit:focus-visible img { opacity: 1; }
+
+      .site-credit:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 4px;
+      }
+
       @media (max-width: 560px) {
         .page { width: min(100% - 28px, 760px); padding-top: 20px; }
         main { padding-top: 34px; }
@@ -405,7 +441,13 @@
 
         <ol class="intentions" id="intentions" aria-label="Prayer intentions by hour"></ol>
         <p class="message" id="message" role="status" hidden></p>
-        <footer>Pause for a moment of prayer.</footer>
+        <footer>
+          <p>Pause for a moment of prayer.</p>
+          <a class="site-credit" href="https://www.notiuhsibijiet.com/" target="_blank" rel="noopener noreferrer" aria-label="Visit notiuhsibijiet.com (opens in a new tab)">
+            <img src="assets/noti-u-hsibijiet.png" alt="" width="22" height="22" loading="lazy" decoding="async" />
+            <span>notiuhsibijiet.com</span>
+          </a>
+        </footer>
       </main>
     </div>
 
