@@ -122,9 +122,49 @@
       }
 
       .date-line {
-        margin: 0 0 27px;
+        margin: 0;
         color: var(--muted);
         font-size: 14px;
+      }
+
+      .day-context {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+        margin: 0 0 27px;
+      }
+
+      .solar-panel {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px 12px;
+      }
+
+      .sun-times {
+        margin: 0;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .solar-button {
+        padding: 6px 9px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--accent-dark);
+        background: #fff;
+        font: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+
+      .solar-button:hover { border-color: var(--accent); }
+
+      .solar-button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
       }
 
       .now-card {
@@ -251,6 +291,16 @@
         line-height: 1.2;
       }
 
+      .solar-marker {
+        display: block;
+        margin-top: 4px;
+        color: var(--accent);
+        font-size: 9px;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: normal;
+      }
+
       .intention-text {
         margin: 0;
         font-size: 14px;
@@ -289,6 +339,8 @@
         main { padding-top: 34px; }
         .season-header { align-items: flex-start; }
         .season-line { padding-top: 6px; }
+        .day-context { align-items: flex-start; flex-direction: column; gap: 10px; }
+        .solar-panel { justify-content: flex-start; }
         .now-card { grid-template-columns: 58px 1fr; gap: 14px; padding: 19px 16px; }
         .hour-badge { width: 54px; height: 54px; }
         .hour-badge strong { font-size: 21px; }
@@ -327,7 +379,13 @@
           </label>
         </div>
         <h1>Prayer intentions</h1>
-        <p class="date-line" id="today"></p>
+        <div class="day-context">
+          <p class="date-line" id="today"></p>
+          <div class="solar-panel">
+            <p class="sun-times" id="sun-times" aria-live="polite">Add your location for local times.</p>
+            <button class="solar-button" id="solar-button" type="button">Show my sunrise &amp; sunset</button>
+          </div>
+        </div>
 
         <section class="now-card" aria-label="Current prayer intention" aria-live="polite">
           <div class="hour-badge" aria-hidden="true">
@@ -355,6 +413,7 @@
       const DAY_MS = 24 * 60 * 60 * 1000;
       let intentionRows = [];
       let hemispherePreference = loadHemispherePreference();
+      let solarCoordinates = null;
       const hemisphereSelect = document.getElementById("hemisphere-select");
 
       const pad = (value) => String(value).padStart(2, "0");
@@ -506,6 +565,93 @@
         return "Ordinary Time";
       }
 
+      function getSunTimes(date, coordinates) {
+        const year = date.getFullYear();
+        const dayOfYear = Math.floor((Date.UTC(year, date.getMonth(), date.getDate()) - Date.UTC(year, 0, 0)) / DAY_MS);
+        const daysInYear = new Date(year, 1, 29).getMonth() === 1 ? 366 : 365;
+        const gamma = 2 * Math.PI / daysInYear * (dayOfYear - 1);
+        const equationOfTime = 229.18 * (
+          0.000075 + 0.001868 * Math.cos(gamma) - 0.032077 * Math.sin(gamma)
+          - 0.014615 * Math.cos(2 * gamma) - 0.040849 * Math.sin(2 * gamma)
+        );
+        const declination = 0.006918 - 0.399912 * Math.cos(gamma) + 0.070257 * Math.sin(gamma)
+          - 0.006758 * Math.cos(2 * gamma) + 0.000907 * Math.sin(2 * gamma)
+          - 0.002697 * Math.cos(3 * gamma) + 0.00148 * Math.sin(3 * gamma);
+        const latitude = coordinates.latitude * Math.PI / 180;
+        const cosHourAngle = (Math.cos(90.833 * Math.PI / 180) / (Math.cos(latitude) * Math.cos(declination)))
+          - Math.tan(latitude) * Math.tan(declination);
+
+        if (cosHourAngle > 1) return { sunrise: null, sunset: null, polarState: "night" };
+        if (cosHourAngle < -1) return { sunrise: null, sunset: null, polarState: "day" };
+
+        const hourAngle = Math.acos(cosHourAngle) * 180 / Math.PI;
+        const utcMidnight = Date.UTC(year, date.getMonth(), date.getDate());
+        const sunriseMinutes = 720 - 4 * (coordinates.longitude + hourAngle) - equationOfTime;
+        const sunsetMinutes = 720 - 4 * (coordinates.longitude - hourAngle) - equationOfTime;
+        return {
+          sunrise: new Date(utcMidnight + sunriseMinutes * 60_000),
+          sunset: new Date(utcMidnight + sunsetMinutes * 60_000),
+        };
+      }
+
+      function getSolarEventsForHour(sunTimes, hour) {
+        if (!sunTimes) return [];
+        return [
+          { name: "Sunrise", time: sunTimes.sunrise },
+          { name: "Sunset", time: sunTimes.sunset },
+        ].filter((event) => event.time && event.time.getHours() === hour);
+      }
+
+      function formatLocalTime(date) {
+        return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+      }
+
+      function addSolarPrayer(intention, events, calendarSeason) {
+        if (events.length === 0) return intention;
+        const reflections = {
+          Spring: {
+            Sunrise: "As spring light touches new leaves, renew our hope.",
+            Sunset: "As spring dusk settles over the fields, grant rest to all who are weary.",
+          },
+          Summer: {
+            Sunrise: "As summer dawn opens a long day, guide our work toward the good.",
+            Sunset: "As the long summer light fades, gather the day's labor into gratitude.",
+          },
+          Autumn: {
+            Sunrise: "As autumn light finds the turning leaves, teach us to welcome change.",
+            Sunset: "As autumn evening cools the earth, shelter all who seek a place to rest.",
+          },
+          Winter: {
+            Sunrise: "As winter dawn arrives slowly, give courage to those who wait in darkness.",
+            Sunset: "As winter twilight lengthens, stay near to all who face a long night.",
+          },
+        };
+        return `${intention} ${events.map((event) => reflections[calendarSeason][event.name]).join(" ")}`;
+      }
+
+      function requestSolarTimes() {
+        const times = document.getElementById("sun-times");
+        const button = document.getElementById("solar-button");
+        if (!navigator.geolocation) {
+          times.textContent = "Location-based sunrise and sunset are not available in this browser.";
+          return;
+        }
+        times.textContent = "Finding today's local sunrise and sunset…";
+        button.disabled = true;
+        navigator.geolocation.getCurrentPosition((position) => {
+          solarCoordinates = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          };
+          button.disabled = false;
+          button.textContent = "Update location";
+          render();
+        }, () => {
+          times.textContent = "Location wasn't available. You can try again when ready.";
+          button.disabled = false;
+        }, { enableHighAccuracy: false, maximumAge: 3_600_000, timeout: 15_000 });
+      }
+
       function makeRow(hour, calendarSeason, liturgicalSeason) {
         return intentionRows.find((entry) => Number(entry.hour) === hour
           && entry.calendar_season === calendarSeason
@@ -533,20 +679,33 @@
         const hour = now.getHours();
         const calendarSeason = getCalendarSeason(now);
         const liturgicalSeason = getLiturgicalSeason(now);
+        const sunTimes = solarCoordinates ? getSunTimes(now, solarCoordinates) : null;
 
         document.getElementById("today").textContent = new Intl.DateTimeFormat(undefined, {
           weekday: "long", day: "numeric", month: "long", year: "numeric",
         }).format(now);
+        const sunTimesLabel = document.getElementById("sun-times");
+        if (sunTimes) {
+          sunTimesLabel.textContent = sunTimes.sunrise && sunTimes.sunset
+            ? `Sunrise ${formatLocalTime(sunTimes.sunrise)} · Sunset ${formatLocalTime(sunTimes.sunset)}`
+            : sunTimes.polarState === "day"
+              ? "The sun stays above the horizon here today."
+              : "The sun stays below the horizon here today.";
+        }
         document.getElementById("calendar-season").textContent = calendarSeason;
         document.getElementById("liturgical-season").textContent = liturgicalSeason;
         hemisphereSelect.value = hemispherePreference;
         hemisphereSelect.options[0].textContent = `Auto (${getHemisphere() === "north" ? "North" : "South"})`;
         document.getElementById("hour-number").textContent = pad(hour);
-        document.getElementById("hour-range").textContent = hourRange(hour);
+        const currentSolarEvents = getSolarEventsForHour(sunTimes, hour);
+        const solarLabel = currentSolarEvents.map((event) => `${event.name} ${formatLocalTime(event.time)}`).join(" · ");
+        document.getElementById("hour-range").textContent = solarLabel ? `${hourRange(hour)} · ${solarLabel}` : hourRange(hour);
         setAccent(liturgicalSeason);
 
         const active = makeRow(hour, calendarSeason, liturgicalSeason);
-        document.getElementById("now-intention").textContent = active?.intention || "No intention is set for this hour and season.";
+        document.getElementById("now-intention").textContent = active
+          ? addSolarPrayer(active.intention, currentSolarEvents, calendarSeason)
+          : "No intention is set for this hour and season.";
 
         const list = document.getElementById("intentions");
         list.replaceChildren();
@@ -563,10 +722,19 @@
           anchor.className = "office-anchor";
           anchor.textContent = entry?.psalter_anchor || "";
           time.append(anchor);
+          const rowSolarEvents = getSolarEventsForHour(sunTimes, index);
+          if (rowSolarEvents.length > 0) {
+            const marker = document.createElement("span");
+            marker.className = "solar-marker";
+            marker.textContent = rowSolarEvents.map((event) => `${event.name} · ${formatLocalTime(event.time)}`).join(" · ");
+            time.append(marker);
+          }
 
           const intention = document.createElement("p");
           intention.className = "intention-text";
-          intention.textContent = entry?.intention || "No intention set.";
+          intention.textContent = entry
+            ? addSolarPrayer(entry.intention, rowSolarEvents, calendarSeason)
+            : "No intention set.";
 
           const nowTag = document.createElement("span");
           nowTag.className = "now-tag";
@@ -613,6 +781,8 @@
         }
         render();
       });
+
+      document.getElementById("solar-button").addEventListener("click", requestSolarTimes);
 
       start();
     </script>

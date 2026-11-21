@@ -16,7 +16,7 @@ Keep the `record_id`, `hour`, `calendar_season`, and `liturgical_season` values 
 - Christmas is treated as December 25 through the Baptism of the Lord, calculated as the Sunday after January 6. Advent begins on the Sunday on or before December 3 and runs through December 24. Ordinary Time is the default.
 - Local calendars can transfer Epiphany or other observances. The first version does not account for local feast transfers or the evening start of liturgical days.
 - The `psalter_anchor` is a devotional guide to the rhythm of the day, not a claim that every civil hour is an appointed canonical hour.
-- Time-zone region is only a rough clue to hemisphere, so use the selector if the automatic choice is wrong. The app does not request location access.
+- Time-zone region is only a rough clue to hemisphere, so use the selector if the automatic choice is wrong. Sunrise and sunset are calculated only after a visitor selects **Show my sunrise & sunset** and grants location access. Coordinates stay in page memory and are not saved or sent anywhere; the displayed times are estimates.
 
 ## Publish with GitHub Pages
 
