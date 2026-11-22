@@ -64,6 +64,16 @@
         letter-spacing: .16em;
       }
 
+      .masthead a {
+        margin-left: auto;
+        color: var(--accent-dark);
+        font-size: 13px;
+        text-decoration: none;
+      }
+
+      .masthead a:hover { text-decoration: underline; text-underline-offset: 3px; }
+      .masthead a:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
       main { padding-top: 40px; }
 
       .season-line {
@@ -396,6 +406,7 @@
       <header class="masthead" aria-label="Prayer by Hour">
         <span class="mark" aria-hidden="true">✝</span>
         <span class="wordmark">PRAYER BY HOUR</span>
+        <a href="about.html">About</a>
       </header>
 
       <main>
