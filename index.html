@@ -718,6 +718,7 @@
 
       function render() {
         const now = new Date();
+        const intentionField = now.getDay() === 0 ? "sunday_intention" : "intention";
         const hour = now.getHours();
         const calendarSeason = getCalendarSeason(now);
         const liturgicalSeason = getLiturgicalSeason(now);
@@ -745,8 +746,8 @@
         setAccent(liturgicalSeason);
 
         const active = makeRow(hour, calendarSeason, liturgicalSeason);
-        document.getElementById("now-intention").textContent = active
-          ? addSolarPrayer(active.intention, currentSolarEvents, calendarSeason)
+        document.getElementById("now-intention").textContent = active?.[intentionField]
+          ? addSolarPrayer(active[intentionField], currentSolarEvents, calendarSeason)
           : "No intention is set for this hour and season.";
 
         const list = document.getElementById("intentions");
@@ -774,8 +775,8 @@
 
           const intention = document.createElement("p");
           intention.className = "intention-text";
-          intention.textContent = entry
-            ? addSolarPrayer(entry.intention, rowSolarEvents, calendarSeason)
+          intention.textContent = entry?.[intentionField]
+            ? addSolarPrayer(entry[intentionField], rowSolarEvents, calendarSeason)
             : "No intention set.";
 
           const nowTag = document.createElement("span");
@@ -788,7 +789,7 @@
         }
 
         const missingHours = Array.from({ length: 24 }, (_, index) => index)
-          .filter((index) => !makeRow(index, calendarSeason, liturgicalSeason));
+          .filter((index) => !makeRow(index, calendarSeason, liturgicalSeason)?.[intentionField]);
         const message = document.getElementById("message");
         message.textContent = missingHours.length > 0
           ? `${missingHours.length} hourly intention${missingHours.length === 1 ? " is" : "s are"} missing for ${calendarSeason} / ${liturgicalSeason}. Update data/intentions.csv.`
