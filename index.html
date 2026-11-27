@@ -27,7 +27,6 @@
 
       body {
         margin: 0;
-        min-width: 320px;
         background: var(--paper);
         color: var(--ink);
         -webkit-font-smoothing: antialiased;
@@ -101,7 +100,13 @@
 
       .season-dot { color: #a8b1a8; }
 
-      .hemisphere-control {
+      .calendar-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+      }
+
+      .calendar-control {
         display: flex;
         align-items: center;
         gap: 7px;
@@ -110,7 +115,7 @@
         white-space: nowrap;
       }
 
-      .hemisphere-control select {
+      .calendar-control select {
         max-width: 130px;
         padding: 5px 22px 5px 8px;
         border: 1px solid var(--line);
@@ -121,7 +126,7 @@
         cursor: pointer;
       }
 
-      .hemisphere-control select:focus-visible {
+      .calendar-control select:focus-visible {
         outline: 2px solid var(--accent);
         outline-offset: 2px;
       }
@@ -318,6 +323,12 @@
         line-height: 1.45;
       }
 
+      .gospel-reference {
+        margin: 5px 0 0;
+        color: var(--accent-dark);
+        font-size: 12px;
+      }
+
       .now-tag {
         min-width: 34px;
         color: var(--accent);
@@ -414,17 +425,26 @@
         <div class="season-header">
           <div class="season-line" aria-label="Current seasons">
             <span id="calendar-season">Calendar season</span>
-            <span class="season-dot" aria-hidden="true">·</span>
-            <span id="liturgical-season">Liturgical season</span>
+            <span class="season-dot" id="season-divider" aria-hidden="true" hidden>·</span>
+            <span id="liturgical-season" hidden></span>
           </div>
-          <label class="hemisphere-control" for="hemisphere-select">
-            <span>Hemisphere</span>
-            <select id="hemisphere-select" aria-label="Calendar season hemisphere">
-              <option value="auto">Auto</option>
-              <option value="north">Northern</option>
-              <option value="south">Southern</option>
-            </select>
-          </label>
+          <div class="calendar-controls">
+            <label class="calendar-control" for="calendar-select">
+              <span>Calendar</span>
+              <select id="calendar-select">
+                <option value="catholic">Catholic</option>
+                <option value="general">General</option>
+              </select>
+            </label>
+            <label class="calendar-control" for="hemisphere-select">
+              <span>Hemisphere</span>
+              <select id="hemisphere-select" aria-label="Calendar season hemisphere">
+                <option value="auto">Auto</option>
+                <option value="north">Northern</option>
+                <option value="south">Southern</option>
+              </select>
+            </label>
+          </div>
         </div>
         <h1>Prayer intentions</h1>
         <div class="day-context">
@@ -443,6 +463,7 @@
           <div>
             <p class="now-label">This hour · <span id="hour-range"></span></p>
             <p class="now-intention" id="now-intention">Loading today's intention…</p>
+            <p class="gospel-reference" id="now-gospel" hidden></p>
           </div>
         </section>
 
@@ -466,6 +487,11 @@
     <script>
       const DAY_MS = 24 * 60 * 60 * 1000;
       let intentionRows = [];
+      const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const daypartNames = ["Night watch", "Early morning", "Morning", "Midday", "Late day", "Night prayer"];
+      const calendarCookie = "prayer-by-hour.calendar";
+      let calendarPreference = loadCalendarPreference();
+      const calendarSelect = document.getElementById("calendar-select");
       let hemispherePreference = loadHemispherePreference();
       let solarCoordinates = null;
       const hemisphereSelect = document.getElementById("hemisphere-select");
@@ -475,6 +501,16 @@
       const dayNumber = (date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / DAY_MS;
       const addDays = (date, days) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
       const isBetween = (date, start, end) => dayNumber(date) >= dayNumber(start) && dayNumber(date) <= dayNumber(end);
+
+      function loadCalendarPreference() {
+        try {
+          const saved = document.cookie.split(";").map((part) => part.trim())
+            .find((part) => part.startsWith(calendarCookie + "="));
+          return saved === calendarCookie + "=general" ? "general" : "catholic";
+        } catch {
+          return "catholic";
+        }
+      }
 
       function loadHemispherePreference() {
         try {
@@ -662,25 +698,9 @@
 
       function addSolarPrayer(intention, events, calendarSeason) {
         if (events.length === 0) return intention;
-        const reflections = {
-          Spring: {
-            Sunrise: "As spring light touches new leaves, renew our hope.",
-            Sunset: "As spring dusk settles over the fields, grant rest to all who are weary.",
-          },
-          Summer: {
-            Sunrise: "As summer dawn opens a long day, guide our work toward the good.",
-            Sunset: "As the long summer light fades, gather the day's labor into gratitude.",
-          },
-          Autumn: {
-            Sunrise: "As autumn light finds the turning leaves, teach us to welcome change.",
-            Sunset: "As autumn evening cools the earth, shelter all who seek a place to rest.",
-          },
-          Winter: {
-            Sunrise: "As winter dawn arrives slowly, give courage to those who wait in darkness.",
-            Sunset: "As winter twilight lengthens, stay near to all who face a long night.",
-          },
-        };
-        return `${intention} ${events.map((event) => reflections[calendarSeason][event.name]).join(" ")}`;
+        const reflections = events.map(event => intentionRows.find(row =>
+          row.hour === event.name && row.natural_season === calendarSeason)?.intention);
+        return [intention, ...reflections].filter(Boolean).join(" ");
       }
 
       function requestSolarTimes() {
@@ -706,10 +726,73 @@
         }, { enableHighAccuracy: false, maximumAge: 3_600_000, timeout: 15_000 });
       }
 
-      function makeRow(hour, calendarSeason, liturgicalSeason) {
-        return intentionRows.find((entry) => Number(entry.hour) === hour
-          && entry.calendar_season === calendarSeason
-          && entry.liturgical_season === liturgicalSeason);
+      function weeklySchedule(date, season, liturgy) {
+        const weekday = weekdayNames[date.getDay()];
+        const churchSeason = liturgy || "Ordinary Time";
+        const today = new Map(intentionRows
+          .filter(row => !row.celebration && row.weekday === weekday &&
+            (!row.natural_season || row.natural_season === season) &&
+            (!row.church_season || row.church_season === churchSeason))
+          .map(row => [Number(row.hour), row]));
+
+        return Array.from({ length: 24 }, (_, hour) => {
+          const row = today.get(hour);
+          return {
+            prayer: row?.intention,
+            anchor: liturgy ? row?.psalter_anchor : daypartNames[Math.floor(hour / 4)],
+          };
+        });
+      }
+
+      // General Roman Calendar, daytime Mass, with Epiphany on January 6.
+      function sundayCelebration(date) {
+        const year = date.getFullYear();
+        const fixed = {
+          "1-1": "Mary, Mother of God", "1-6": "Epiphany", "2-2": "Presentation",
+          "6-24": "Nativity of John the Baptist", "6-29": "Saints Peter and Paul",
+          "8-6": "Transfiguration", "8-15": "Assumption", "9-14": "Exaltation of the Holy Cross",
+          "11-1": "All Saints", "11-2": "All Souls", "11-9": "Dedication of the Lateran Basilica",
+          "12-25": "Christmas",
+        };
+        const feast = fixed[`${date.getMonth() + 1}-${date.getDate()}`];
+        if (feast) return feast;
+
+        const day = dayNumber(date);
+        const advent = dayNumber(firstAdventSunday(year));
+        const baptism = dayNumber(baptismOfTheLord(year));
+        if (day < baptism) return "Second Sunday of Christmas";
+        if (day === baptism) return "Baptism of the Lord";
+        if (date.getMonth() === 11 && date.getDate() > 25) return "Holy Family";
+        if (day >= advent) return "Advent " + (1 + (day - advent) / 7);
+
+        // Both dates are Sundays, so the difference is a whole number of weeks.
+        const weeksFromEaster = (day - dayNumber(easterSunday(year))) / 7;
+        if (weeksFromEaster < -6) return "Ordinary " + (1 + (day - baptism) / 7);
+        if (weeksFromEaster === -1) return "Palm Sunday";
+        if (weeksFromEaster < 0) return "Lent " + (7 + weeksFromEaster);
+        if (weeksFromEaster < 7) return "Easter " + (1 + weeksFromEaster);
+        if (weeksFromEaster === 7) return "Pentecost";
+        if (weeksFromEaster === 8) return "Trinity Sunday";
+        // Christ the King (week 34) falls one week before the first Sunday of Advent.
+        return "Ordinary " + (35 - (advent - day) / 7);
+      }
+
+      function scheduleForDate(date, season, liturgy) {
+        const schedule = weeklySchedule(date, season, liturgy);
+        if (liturgy && date.getDay() === 0) {
+          const year = date.getFullYear();
+          const liturgicalYear = dayNumber(date) >= dayNumber(firstAdventSunday(year)) ? year + 1 : year;
+          const cycle = ["C", "A", "B"][liturgicalYear % 3];
+          const celebration = sundayCelebration(date);
+          const reading = intentionRows.find(row => row.celebration === celebration &&
+            (!row.lectionary_year || row.lectionary_year === cycle));
+          if (reading) {
+            const slot = schedule[Number(reading.hour)];
+            slot.prayer = reading.intention;
+            slot.gospel = reading.gospel;
+          }
+        }
+        return schedule;
       }
 
       function setAccent(liturgicalSeason) {
@@ -730,10 +813,10 @@
 
       function render() {
         const now = new Date();
-        const intentionField = now.getDay() === 0 ? "sunday_intention" : "intention";
         const hour = now.getHours();
         const calendarSeason = getCalendarSeason(now);
-        const liturgicalSeason = getLiturgicalSeason(now);
+        const liturgicalSeason = calendarPreference === "catholic" ? getLiturgicalSeason(now) : "";
+        const schedule = scheduleForDate(now, calendarSeason, liturgicalSeason);
         const sunTimes = solarCoordinates ? getSunTimes(now, solarCoordinates) : null;
 
         document.getElementById("today").textContent = new Intl.DateTimeFormat(undefined, {
@@ -749,23 +832,20 @@
         }
         document.getElementById("calendar-season").textContent = calendarSeason;
         document.getElementById("liturgical-season").textContent = liturgicalSeason;
+        document.getElementById("liturgical-season").hidden = !liturgicalSeason;
+        document.getElementById("season-divider").hidden = !liturgicalSeason;
         hemisphereSelect.value = hemispherePreference;
-        hemisphereSelect.options[0].textContent = `Auto (${getHemisphere() === "north" ? "North" : "South"})`;
+        hemisphereSelect.options[0].textContent = `Auto (${detectHemisphere() === "north" ? "North" : "South"})`;
         document.getElementById("hour-number").textContent = pad(hour);
         const currentSolarEvents = getSolarEventsForHour(sunTimes, hour);
         const solarLabel = currentSolarEvents.map((event) => `${event.name} ${formatLocalTime(event.time)}`).join(" · ");
         document.getElementById("hour-range").textContent = solarLabel ? `${hourRange(hour)} · ${solarLabel}` : hourRange(hour);
         setAccent(liturgicalSeason);
 
-        const active = makeRow(hour, calendarSeason, liturgicalSeason);
-        document.getElementById("now-intention").textContent = active?.[intentionField]
-          ? addSolarPrayer(active[intentionField], currentSolarEvents, calendarSeason)
-          : "No intention is set for this hour and season.";
-
         const list = document.getElementById("intentions");
         list.replaceChildren();
         for (let index = 0; index < 24; index += 1) {
-          const entry = makeRow(index, calendarSeason, liturgicalSeason);
+          const entry = schedule[index];
           const item = document.createElement("li");
           item.className = "intention-row";
           if (index === hour) item.setAttribute("aria-current", "time");
@@ -775,7 +855,7 @@
           time.append(document.createTextNode(hourRange(index)));
           const anchor = document.createElement("span");
           anchor.className = "office-anchor";
-          anchor.textContent = entry?.psalter_anchor || "";
+          anchor.textContent = entry.anchor;
           time.append(anchor);
           const rowSolarEvents = getSolarEventsForHour(sunTimes, index);
           if (rowSolarEvents.length > 0) {
@@ -787,36 +867,54 @@
 
           const intention = document.createElement("p");
           intention.className = "intention-text";
-          intention.textContent = entry?.[intentionField]
-            ? addSolarPrayer(entry[intentionField], rowSolarEvents, calendarSeason)
+          intention.textContent = entry.prayer
+            ? addSolarPrayer(entry.prayer, rowSolarEvents, calendarSeason)
             : "No intention set.";
+          const content = document.createElement("div");
+          content.append(intention);
+          const reference = entry.gospel ? `Sunday Gospel · ${entry.gospel}` : "";
+          if (reference) {
+            const citation = document.createElement("p");
+            citation.className = "gospel-reference";
+            citation.textContent = reference;
+            content.append(citation);
+          }
+          if (index === hour) {
+            document.getElementById("now-intention").textContent = intention.textContent;
+            const currentReference = document.getElementById("now-gospel");
+            currentReference.textContent = reference;
+            currentReference.hidden = !reference;
+          }
 
           const nowTag = document.createElement("span");
           nowTag.className = "now-tag";
           nowTag.textContent = "NOW";
           nowTag.setAttribute("aria-hidden", "true");
 
-          item.append(time, intention, nowTag);
+          item.append(time, content, nowTag);
           list.append(item);
         }
 
-        const missingHours = Array.from({ length: 24 }, (_, index) => index)
-          .filter((index) => !makeRow(index, calendarSeason, liturgicalSeason)?.[intentionField]);
+        const missingHours = schedule.filter((entry) => !entry.prayer);
         const message = document.getElementById("message");
         message.textContent = missingHours.length > 0
-          ? `${missingHours.length} hourly intention${missingHours.length === 1 ? " is" : "s are"} missing for ${calendarSeason} / ${liturgicalSeason}. Update data/intentions.csv.`
+          ? `${missingHours.length} hourly intention${missingHours.length === 1 ? " is" : "s are"} missing for today.`
           : "";
         message.hidden = missingHours.length === 0;
+      }
+
+      async function loadIntentions() {
+        const response = await fetch(new URL("./data/intentions.csv", window.location.href), { cache: "no-cache" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const rows = parseCsv(await response.text());
+        if (!rows.length) throw new Error("Empty intention file");
+        return rows;
       }
 
       async function start() {
         const message = document.getElementById("message");
         try {
-          const dataUrl = new URL("./data/intentions.csv", window.location.href);
-          const response = await fetch(dataUrl, { cache: "no-cache" });
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          intentionRows = parseCsv(await response.text());
-          if (intentionRows.length === 0) throw new Error("No intention records were found.");
+          intentionRows = await loadIntentions();
           render();
           window.setInterval(render, 30_000);
         } catch (error) {
@@ -826,6 +924,18 @@
         }
       }
 
+      calendarSelect.value = calendarPreference;
+      calendarSelect.addEventListener("change", () => {
+        calendarPreference = calendarSelect.value;
+        try {
+          const secure = window.location.protocol === "https:" ? "; Secure" : "";
+          document.cookie = `${calendarCookie}=${calendarPreference}; Max-Age=31536000; Path=/; SameSite=Lax${secure}`;
+        } catch {
+          // The choice still works for this visit when cookies are blocked.
+        }
+        if (intentionRows.length) render();
+      });
+
       hemisphereSelect.value = hemispherePreference;
       hemisphereSelect.addEventListener("change", () => {
         hemispherePreference = hemisphereSelect.value;
@@ -834,7 +944,7 @@
         } catch {
           // The selection still applies for this page view if browser storage is unavailable.
         }
-        render();
+        if (intentionRows.length) render();
       });
 
       document.getElementById("solar-button").addEventListener("click", requestSolarTimes);

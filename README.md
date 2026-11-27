@@ -4,14 +4,22 @@ A small static site that shows one prayer intention for each hour. It follows th
 
 ## Edit the intentions
 
-`data/intentions.csv` is the editable source. Open it in Excel, LibreOffice, or Google Sheets, change values in the `intention` column for Monday through Saturday or the `sunday_intention` column for Sunday, and save or download it as UTF-8 CSV with the same filename and headers. The site reads this file directly, so there is no build step. Commit the updated CSV and publish the branch to update the site.
+The site reads `data/intentions.csv` directly. To edit a prayer, find its `weekday` and `hour` (0–23), then edit the `intention` for the desired season.
 
-Keep the `record_id`, `hour`, `calendar_season`, and `liturgical_season` values unchanged unless you are also changing the lookup scheme. The site expects one row for every hour and season combination.
+- Weekly rows have a blank `celebration`. A blank `natural_season` or `church_season` matches any value in that column. If both are blank, the prayer is used year-round.
+- General always selects `Ordinary Time` for the Church-season lookup. Catholic selects the current Church season. Both calendars use the visitor's natural season. Keep exactly one matching row for each weekday, hour and combination of seasons.
+- `psalter_anchor` supplies the Catholic label for the hour.
+- Catholic Sunday Gospel rows have a `celebration`, a `gospel` reference and an original prayer in `intention`. The `lectionary_year` column takes A, B or C, or stays blank for a reading shared across the cycle. These rows supply the noon intention. Keep one matching Gospel row per celebration and cycle.
+- The eight optional sunrise and sunset reflections use `Sunrise` or `Sunset` in the hour column and a natural season. They are appended when the visitor enables local sun times.
 
 ## Calendar behavior
 
 - Hour and date use the visitor's local browser time.
-- Sunday uses its own hourly intentions from midnight until the next local midnight. Both Sunday and weekday intentions follow the current calendar and liturgical seasons.
+- Each weekday, including Sunday, has 24 hourly intentions. The same weekday repeats the following week while the seasons stay the same. The page updates automatically when the local hour or day changes.
+- Each four-hour window has one slot that follows the natural season in General and the Church season in Catholic during Advent, Christmas, Lent, Holy Week, and Easter. The other three slots share their prayers across both calendars. Some have natural-season variants for school, family care, and work on the land. For example, a summer morning can remember teachers resting or children missing their friends. Both calendars use the same natural-season variants, including when Christmas falls in summer.
+- Catholic Sundays have one exception to the weekly timetable. At noon the prayer follows the Sunday Gospel, including in Advent and Lent. The A/B/C cycle changes on the first Sunday of Advent. The app uses the daytime Mass on the General Roman Calendar, keeping Epiphany on January 6 and Ascension and Corpus Christi on Thursday. Palm Sunday uses the Passion. Where alternatives are permitted, the displayed reference identifies the chosen reading.
+- Reading references follow the [Liturgy Office Sunday lectionary tables](https://www.liturgyoffice.org.uk/Calendar/Sunday/index.shtml). The [USCCB lectionary guide](https://www.usccb.org/faq/questions-about-lectionary) explains the three-year cycle.
+- Catholic is the default. Choosing a calendar saves a first-party preference cookie for one year. If cookies are blocked, the choice still works on the open page.
 - Calendar seasons use meteorological months for the selected hemisphere. The default `Auto` setting makes a best-effort guess from the browser's time-zone region; visitors can choose Northern or Southern manually. That choice is saved in the current browser. Northern seasons are spring March to May, summer June to August, autumn September to November, and winter December to February. Southern seasons are reversed.
 - Liturgical season uses Gregorian Easter computus. Holy Week takes precedence over Lent from Palm Sunday through Holy Saturday. Easter includes Pentecost Sunday.
 - Christmas is treated as December 25 through the Baptism of the Lord, calculated as the Sunday after January 6. Advent begins on the Sunday on or before December 3 and runs through December 24. Ordinary Time is the default.
